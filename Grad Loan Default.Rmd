@@ -1,0 +1,1467 @@
+---
+title: "Graduate Student Loan Default Analysis"
+author: "Frank Laudert"
+date: "2023-01-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+```{r}
+
+
+
+
+
+
+library(rmarkdown)
+
+library(reticulate)
+
+library(knitr)
+
+
+
+library(dplyr)
+
+library(ggplot2)
+
+library(tidyr)
+
+library(pander)
+
+library(kableExtra)
+
+library(forcats)
+
+library(skimr)
+
+library(gt)
+
+library(GGally)
+
+library(gmodels)
+
+library(plotly)
+
+library(scales)
+
+
+library(ggforce)
+
+
+library(lubridate)
+
+library(DT)
+
+library(visdat)
+
+
+
+library(packcircles)
+
+library(viridis)
+
+library(ggthemes)
+
+library(purrr)
+
+library(ggtext)
+
+library(RColorBrewer)
+
+library(ggpubr)
+
+
+
+
+
+
+
+
+```
+
+
+# Introduction
+
+<br/><br/>
+
+Studies of student default on the Federal Direct Student Loan program have been performed previously though these studies have concentrated on undergraduate populations. This project will focus on graduate student default analysis. The reason for this is the default rate for the graduate population at the college is close to the undergraduate graduate population's default rate. Studies on undergraduate defaults have pointed to dropping out and race as being the determining factors. Graduate populations may differ when it comes to the factors leading to default. This analysis will use classification algorithms to find which factors lead to defaulting of student loan among the graduate population.
+
+<br/><br/>
+
+R 4.2.1 and Python 3.9.13 are used for this analysis.
+
+<br/><br/>
+
+Below are References of articles on student loan default.
+
+<br/><br/>
+
+*Who Are Student Loan Defaulters?* (2017, December 14). Center for American Progress. <https://www.americanprogress.org/article/student-loan-defaulters/>
+
+<br/><br/>
+
+Author, B. (2021, July 7). *Who Is More Likely to Default on Student Loans?* Liberty Street Economics. <https://libertystreeteconomics.newyorkfed.org/2017/11/who-is-more-likely-to-default-on-student-loans/>
+
+<br/><br/>
+
+# Data
+
+<br/><br/>
+
+## Data Dictionary
+
+<br/><br/>
+
+<br/><br/>
+
+## Initial Data Analysis
+
+
+
+
+
+
+```{r}
+
+
+dflt_grad<-dflt_data %>% 
+  select(-cip_cde, -local_gpa, -ipeds_report_value, -depend_status,-fam_size, -par_fam_size)
+
+
+
+
+```
+
+
+Remove undergraduates from data set
+
+```{r}
+
+
+dflt_grad<-dflt_grad %>% 
+  filter(div_cde != "UG")
+
+
+
+```
+
+
+convert to numeric
+
+```{r}
+
+dflt_grad$efc<-as.numeric(dflt_grad$efc)
+
+dflt_grad$total_income<-as.numeric(dflt_grad$total_income)
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+
+
+skim(dflt_grad)
+
+
+
+```
+
+
+
+
+<br/><br/>
+
+## Cleaning and Preparation
+
+Cleaning and preparation involves removing duplicate rows/columns, dropping or combining categories, renaming variables or categories, removing null entries,creating new variables, and formating date features.
+
+<br/><br/>
+
+The date columns are type characters. These columns will be used to create new features and as such will need to be converted to a date format.
+
+<br/><br/>
+
+pay start date
+
+
+
+
+```{r}
+
+
+#convert character column to date
+dflt_grad$pay_start_date<-as.Date(as.character(dflt_grad$pay_start_date),format="%m/%d/%Y")
+
+#convert date column to POSIXct format
+
+dflt_grad$pay_start_date<-as.POSIXct(dflt_grad$pay_start_date,format="%Y/%m/%d")
+
+
+
+```
+
+<br/><br/>
+
+entry data
+
+
+```{r}
+
+
+#convert character column to date
+dflt_grad$entry_dte<-as.Date(as.character(dflt_grad$entry_dte),format="%m/%d/%Y")
+
+#convert date column to POSIXct format
+
+dflt_grad$entry_dte<-as.POSIXct(dflt_grad$entry_dte,format="%Y/%m/%d")
+
+
+
+
+
+```
+
+
+<br/><br/>
+
+Date of Dirth
+
+
+```{r}
+
+
+#convert character column to date
+dflt_grad$dob<-as.Date(as.character(dflt_grad$dob),format="%m/%d/%Y")
+
+#convert date column to POSIXct format
+
+dflt_grad$dob<-as.POSIXct(dflt_grad$dob,format="%Y/%m/%d")
+
+
+
+```
+
+<br/><br/>
+
+exit date
+
+
+```{r}
+
+
+
+
+#convert character column to date
+dflt_grad$exit_dte<-as.Date(as.character(dflt_grad$exit_dte),format="%m/%d/%Y")
+
+#convert date column to POSIXct format
+
+dflt_grad$exit_dte<-as.POSIXct(dflt_grad$exit_dte,format="%Y/%m/%d")
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+skim(dflt_grad)
+
+
+
+
+```
+
+
+
+
+
+<br/><br/>
+
+The output from the skim() function after the data transformnation we know that there are now 15 categorical variable that are of type *`character`*. Categorical variables must be of type *factor* for use in classification models, thus these variables will be transformed to type *`factor`*.
+
+<br/><br/>
+
+```{r}
+
+
+dflt_grad_2<-dflt_grad %>% 
+  mutate_if(is.character, factor)
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+dflt_vis<-vis_dat(dflt_grad)
+
+
+```
+
+
+
+
+
+```{r echo=FALSE, fig.cap="Figure 1: Missing Values  Plot", fig.height=8, fig.width=11, message=FALSE, warning=FALSE}
+
+
+dflt_vis
+
+
+
+```
+
+<br/><br/>
+
+Table 1 displays the data set as having factor, numeric, and POSXct (date) features.
+
+<br/><br/>
+
+<br/><br/>
+
+Combine exit reason level
+
+
+```{r}
+
+
+dflt_grad_2<-dflt_grad_2 %>% 
+  mutate(exit_reason=recode(exit_reason, 'D' ="WD", "T"="WD", "LV"="WD")) 
+
+
+```
+
+
+
+
+
+```{r}
+
+
+dflt_grad_2<-dflt_grad_2 %>% 
+  mutate(loan_status=recode(loan_status, 'B' ="Y", "D"="N")) 
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+dflt_grad_2<-dflt_grad_2 %>% 
+  mutate(degr_cde=recode(degr_cde, "POGCT" ="CT", "EDD"="EDL", "MBA"="MM")) 
+
+
+```
+
+
+Drop unused levels
+
+```{r}
+
+
+
+dflt_grad_2$degr_cde<-droplevels(dflt_grad_2$degr_cde)
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+sum_1<-dflt_grad_2 %>% 
+  select(exit_reason, loan_status, div_cde) %>% 
+  summary()
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+pander(sum_1, "Table 1:  Summary Factor Variables ")
+
+
+
+
+```
+
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+
+
+py_install("datetime", pip=TRUE)
+
+
+
+```
+
+
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+
+
+
+py_install("dateutil", pip=TRUE)
+
+
+```
+
+
+
+
+
+```{python}
+
+import datetime
+
+from dateutil.relativedelta import relativedelata
+
+
+import pandas as pd
+
+import numpy as np
+
+import pickle
+
+from datetime import date
+
+```
+
+
+
+<br/><br/>
+
+Create age at exit data
+
+<br/><br/>
+
+
+```{python}
+
+
+dflt_gr_3=r.dflt_grad_2
+
+
+```
+
+
+
+
+
+```{python}
+
+
+dflt_gr_3.info()
+
+
+```
+
+
+
+
+
+```{python}
+
+
+dflt_gr_3["age"]=dflt_gr_3["exit_dte"]-dflt_gr_3["dob"]
+
+
+dflt_gr_3["age"]=dflt_gr_3["age"]/np.timedelta64(1,'Y')
+
+
+dflt_gr_3["age"].head()
+
+
+```
+
+
+
+
+```{python}
+
+
+dflt_gr_3['age']=dflt_gr_3['age'].round()
+
+dflt_gr_3['age'].head()
+
+
+```
+
+
+
+
+
+
+```{python}
+
+
+
+dflt_gr_3['age'].describe()
+
+
+```
+
+
+
+
+
+
+```{python}
+
+
+
+
+dflt_gr_3["yrs_to_exit_dt"]=dflt_gr_3["exit_dte"]-dflt_gr_3["entry_dte"]
+
+
+dflt_gr_3["yrs_to_exit_dt"]=dflt_gr_3["yrs_to_exit_dt"]/np.timedelta64(1,'Y')
+
+dflt_gr_3["yrs_to_exit_dt"].head()
+
+
+
+```
+
+
+
+
+
+
+
+```{python}
+
+
+
+
+
+
+dflt_gr_3["yrs_to_exit_dt"]=dflt_gr_3["yrs_to_exit_dt"].round()
+
+dflt_gr_3["yrs_to_exit_dt"].head()
+
+
+```
+
+
+
+
+
+
+
+
+```{python}
+
+
+file_out=open("dflt_gr_3","wb")
+pickle.dump(dflt_gr_3, file_out)
+file_out.close()
+
+
+```
+
+
+
+
+```{python}
+
+
+pickle_in=open("dflt_gr_3","rb")
+dflt_gr_3=pickle.load(pickle_in)
+
+
+```
+
+
+
+
+
+
+```{python}
+
+r.dflt_grad_4=dflt_gr_3
+
+
+
+```
+
+
+
+
+
+
+
+
+```{r}
+
+
+
+dflt_grad_4<-dflt_grad_4 %>% 
+  filter(yrs_to_exit_dt > 0)
+
+
+```
+
+Undergrad Loans Borrowed at Cambridge College
+
+<br/><br/>
+
+
+
+
+```{r}
+
+
+dflt_grad_4<-dflt_grad_4 %>% 
+  mutate(undergrad_loans_cc=life_sub_ugrad+life_unsub_ugrad)
+
+
+
+
+```
+
+
+
+<br/><br/>
+
+Graduate Loans Borrowed at Cambridge College
+
+<br/><br/>
+
+
+
+
+
+
+
+```{r}
+
+
+dflt_grad_4<-dflt_grad_4 %>% 
+  mutate(grad_loans_cc=life_sub_grad+life_unsub_grad)
+
+
+
+
+```
+
+
+
+<br/><br/>
+
+Total Loans borrowed at Cambridge College
+
+<br/><br/>
+
+```{r}
+
+
+
+dflt_grad_4<-dflt_grad_4 %>% 
+  mutate(total_loans_cc=life_sub_grad+life_unsub_grad+life_sub_ugrad+life_unsub_ugrad)
+
+
+```
+
+
+<br/><br/>
+
+loans borrowed before CC.
+
+
+
+```{r}
+
+
+
+dflt_grad_4<-dflt_grad_4 %>% 
+  mutate(loans_not_cc=nslds_loan_total-total_loans_cc)
+
+
+```
+
+
+
+
+
+```{r}
+
+
+glimpse(dflt_grad_4)
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+dflt_grad_4$loans_not_cc[dflt_grad_4$loans_not_cc < 0]<-0
+
+
+
+```
+
+
+
+
+
+<br/><br/>
+
+## Exploratory Data Analysis
+
+<br/><br/>
+
+### Univariate
+
+<br/><br/>
+
+
+
+```{r}
+
+
+
+options(scipen=999)
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+gender_cnt<-dflt_grad_4 %>% 
+  count(gender)
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+fig <- plot_ly(gender_cnt, labels = ~gender, values = ~n, type = 'pie')
+               
+  
+  
+
+fig <- fig %>% layout(title = 'Enrollment by Gender',
+
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+
+
+
+```
+
+
+
+
+```{r echo=FALSE}
+
+
+
+fig
+
+
+```
+
+
+
+
+```{r}
+
+
+loan_stat_pct<-dflt_grad_4 %>% 
+  count(loan_status) %>% 
+  mutate(perc=round(n/ sum(n),2))
+
+loan_stat_table <- loan_stat_pct %>% 
+  select(loan_status, perc) %>% 
+  ggtexttable(rows = NULL,  theme = ttheme("mBlue", base_size=14)) %>% tab_add_title("Loan Status Percentage",face="bold", size=8) %>% 
+  tab_add_footnote("Table 12", size=9)
+
+
+```
+
+
+
+```{r}
+
+
+loan_stat_table
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+
+grad_loans<-ggplot(dflt_grad_4, aes(x=grad_loans_cc))+
+  geom_histogram(fill="green")+
+  geom_vline(aes(xintercept=mean(grad_loans_cc)),
+            color="red", linetype="dashed", size=1)+
+   theme(plot.title = element_text(color="blue", size=14, face="bold.italic", hjust=0.5),
+    axis.ticks.x=element_blank(),legend.position = "none",axis.title.x=element_blank(),
+    axis.title.y=element_blank())+
+    
+    #ylab("Median Age")+
+  #xlab("Program")
+  ggtitle("Distribuition of Graduate Level Loan Totals Borrowed at College")
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+undergrad_loans<-ggplot(dflt_grad_4, aes(x=undergrad_loans_cc))+
+  geom_histogram(fill="blue", bins=10)+
+  geom_vline(aes(xintercept=mean(undergrad_loans_cc)),
+            color="red", linetype="dashed", size=1)+
+   theme(plot.title = element_text(color="blue", size=14, face="bold.italic", hjust=0.5),
+    axis.ticks.x=element_blank(),legend.position = "none",axis.title.x=element_blank(),
+    axis.title.y=element_blank())+
+    
+    #ylab("Median Age")+
+  #xlab("Program")
+  ggtitle("Distribuition of Undergradute Level Loan Totals Borrowed at College")
+
+
+
+
+undergrad_loans
+
+```
+
+
+
+
+
+
+```{r}
+
+
+non_cc_loan<-ggplot(dflt_grad_4, aes(x=loans_not_cc))+
+  geom_histogram(fill="yellow", bins=20)+
+  geom_vline(aes(xintercept=mean(loans_not_cc)),
+            color="red", linetype="dashed", size=1)+
+   theme(plot.title = element_text(color="blue", size=14, face="bold.italic", hjust=0.5),
+    axis.ticks.x=element_blank(),legend.position = "none",axis.title.x=element_blank(),
+    axis.title.y=element_blank())+
+    
+    #ylab("Median Age")+
+  #xlab("Program")
+  ggtitle("Distribuition of  Loan Totals Borrowed at Other Colleges")
+
+non_cc_loan
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+gender_dflt<-dflt_grad_4 %>% 
+  count(gender, loan_status) %>% 
+  group_by(gender) %>% 
+  mutate(perc = n / sum(n)) %>% 
+  ggplot(aes(x=gender, y=perc, fill=loan_status))+
+  geom_col(position="dodge")+
+  labs(x = "Gender", y = "Percent", fill = " Loan Status")+
+  scale_y_continuous(labels=scales::percent_format())+
+  geom_text(aes(label=percent(perc),
+                y=perc + .03),
+            position=position_dodge(0.9),
+            vjust=.05)+
+  theme(axis.ticks.x=element_blank())+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text(angle=25, size=10,hjust=.9))+
+  theme(axis.text.y=element_text(size=12), axis.title.x=element_blank())+
+  ggtitle("Loan Default by Gender")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.title.y=element_blank(),  axis.text.y = element_blank(),axis.ticks = element_blank())+
+  theme(legend.position = "none")
+  theme(legend.position = "none")
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+gender_dflt
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+gender_loan_bx<-dflt_grad_4 %>%
+  select(total_loans_cc, gender) %>% 
+  ggplot(aes(x=total_loans_cc, y=gender, fill=gender))+
+  geom_boxplot()+
+  #facet_wrap(~degr_cde)+
+   #labs(x = "Years Enrolled", y = "YDegree")+
+ # theme(legend.position = "none")
+  ggtitle('Total Loans at College by Gender')+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.ticks.x=element_blank(),legend.position = "none")+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text( size=10))+
+   theme(axis.title.y=element_blank(),  axis.title.x=element_blank())+
+   theme(axis.text.y=element_text(size=12))
+
+
+gender_loan_bx
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+strp_1<-ggplot(dflt_grad_4, aes(x=age, y=gender)) + 
+  geom_jitter(position=position_jitter(0.2))+
+  ggtitle("Age by Gender")
+
+
+
+strp_2<-strp_1 + coord_flip()
+
+strp_3<-strp_2 + stat_summary(fun=median, geom="point", shape=18,
+                 size=3, color="red")
+
+strp_4<-strp_3 +scale_color_grey() + theme_classic()
+
+
+
+strp_4
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+dflt_grad_4 %>% select(gender, age) %>% 
+  group_by(gender) %>% 
+  summarise(avg_age=round(mean(age),1))
+
+degr_pct<-dflt_grad_4 %>% 
+  count(degr_cde) %>% 
+  mutate(perc=round(n/ sum(n),3))
+
+
+deg_plt<-ggplot(degr_pct, aes(x = reorder(degr_cde, -perc), y = perc, fill=degr_cde))+ 
+  geom_bar(stat = "identity")+
+  labs(x = "Degree", y = "Percent", fill = "Degree")+
+  scale_y_continuous(labels=scales::percent_format())+
+  #geom_text(aes(label=percent(perc),
+                #y=perc + .02),
+            #position=position_dodge(0.9),
+           # vjust=.10, size=3.0)+
+  ggtitle("Degree as Percentage of Enrollment")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.ticks.x=element_blank(),legend.position = "none")+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text(angle=70, size=10,hjust=1))+
+   theme(axis.title.y=element_blank(),  axis.title.x=element_blank())+
+   theme(axis.text.y=element_text(size=12))
+
+deg_plt
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+enroll_lgth_bx<-dflt_grad_4 %>%
+  select(yrs_to_exit_dt, degr_cde) %>% 
+  ggplot(aes(x=yrs_to_exit_dt, y=degr_cde, fill=degr_cde))+
+  geom_boxplot()+
+  #facet_wrap(~degr_cde)+
+   #labs(x = "Years Enrolled", y = "YDegree")+
+ # theme(legend.position = "none")
+  ggtitle("Years Enrolled by Degree")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.ticks.x=element_blank(),legend.position = "none")+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text( size=10))+
+   theme(axis.title.y=element_blank(),  axis.title.x=element_blank())+
+   theme(axis.text.y=element_text(size=12))
+
+
+enroll_lgth_bx
+  
+
+
+```
+
+
+
+
+```{r}
+
+
+
+dflt_grad_4 %>% select(degr_cde, yrs_to_exit_dt) %>% 
+  group_by(degr_cde) %>% 
+  summarise(avg_yrs=round(mean(yrs_to_exit_dt),1))
+
+
+degr_dflt<-dflt_grad_4 %>% 
+  count(degr_cde, loan_status) %>% 
+  group_by(degr_cde) %>% 
+  mutate(perc = n / sum(n)) %>% 
+  ggplot(aes(x=degr_cde, y=perc, fill=loan_status))+
+  geom_col(position="dodge")+
+  labs(fill = " Default Status")+
+  scale_y_continuous(labels=scales::percent_format())+
+  geom_text(aes(label=percent(perc),
+                y=perc + .02),
+            position=position_dodge(0.9),
+            vjust=.10, size=3.0)+
+   ggtitle("Default Status as Percentage by Dergree")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(legend.text=element_text(size=8))+
+  theme(axis.text.x=element_text(angle=70, hjust=1))+
+   theme(legend.title = element_text(size = 9))+
+   theme(axis.title.y=element_blank(),  axis.text.y = element_blank(),axis.ticks = element_blank(), axis.title.x=element_blank())
+
+
+degr_dflt
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+degree_loan__box_2<-dflt_grad_4%>% 
+  #filter(xfer_hrs_earned <100) %>% 
+  plot_ly(x=~degr_cde, y=~total_loans_cc) %>% 
+  add_boxplot() %>% 
+  layout(title = 'Total Loans CC by Degree', xaxis = list(title = 'Degree'), font=t, plot_bgcolor = "#e5ecf6",
+
+         yaxis = list(title = 'Total Loans'), legend = list(title=list(text='Degree')))
+
+degree_loan__box_2
+
+
+
+```
+
+
+
+
+
+```{r}
+
+degr_bx_plt<-dflt_grad_4 %>%
+  ggplot(aes(x=total_loans_cc, y=degr_cde, fill=degr_cde))+
+  geom_boxplot()+
+  #facet_wrap(vars(degr_cde))+
+  theme(legend.position = "none",
+        #axis.title.x=element_blank(),
+        #axis.title.y=element_blank(),
+        #axis.text.x=element_blank(),
+        plot.title=element_text(size=10, hjust=0.5))+
+  ggtitle("Total Loans Borrowed at College by Degree")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.ticks.x=element_blank(),legend.position = "none")+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text( size=10))+
+   theme(axis.title.y=element_blank(),  axis.title.x=element_blank())+
+   theme(axis.text.y=element_text(size=12))
+
+
+
+
+degr_bx_plt
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+degree_bx<-dflt_grad_4 %>%
+  select(grad_loans_cc, degr_cde) %>% 
+  ggplot(aes(x=grad_loans_cc, y=degr_cde, fill=degr_cde))+
+  geom_boxplot()+
+  #facet_wrap(~degr_cde)+
+   labs(x = "Degree", y = "Total Loans")+
+  theme(legend.position = "none")
+
+degree_bx
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+school_pct<-dflt_grad_4 %>% 
+  count(school) %>% 
+  mutate(perc=round(n/ sum(n),3))
+
+
+
+sch_plt<-ggplot(school_pct, aes(x = reorder(school, -perc), y = perc, fill=school))+ 
+  geom_bar(stat = "identity")+
+  labs(x = "School", y = "Percent", fill = "School")+
+  scale_y_continuous(labels=scales::percent_format())+
+  #geom_text(aes(label=percent(perc),
+               # y=perc + .02),
+            #position=position_dodge(0.9),
+            #vjust=.10, size=3.0)+
+  theme(axis.ticks.x=element_blank(),
+        axis.text=element_text(size=8),legend.position="none")+
+  ggtitle("Percentage of Enrollment by School")+
+  theme(plot.title = element_text(color="blue", size=11, face="bold.italic", hjust=0.5))+
+  theme(axis.ticks.x=element_blank(),legend.position = "none")+
+   theme(axis.ticks.x=element_blank())+
+  theme(axis.text.x=element_text(angle=70, size=10,hjust=1))+
+   theme(axis.title.y=element_blank(),  axis.title.x=element_blank())+
+   theme(axis.text.y=element_text(size=12))
+
+sch_plt
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+enroll_lgth_bx<-dflt_grad_4 %>%
+  select(yrs_to_exit_dt, school) %>% 
+  ggplot(aes(x=yrs_to_exit_dt, y=school, fill=school))+
+  geom_boxplot()+
+  #facet_wrap(~degr_cde)+
+   labs(x = "School", y = "Years Enrolled")+
+  theme(legend.position = "none")
+
+enroll_lgth_bx
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+dflt_grad_4 %>% select(school, yrs_to_exit_dt) %>% 
+  group_by(school) %>% 
+  summarise(avg_yrs=round(mean(yrs_to_exit_dt),1))
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+dflt_grad_4 %>% select(degr_cde, yrs_to_exit_dt) %>% 
+  group_by(degr_cde) %>% 
+  summarise(avg_yrs=round(mean(yrs_to_exit_dt),1))
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+
+sch_dflt<-dflt_grad_4 %>% 
+  count(school, loan_status) %>% 
+  group_by(school) %>% 
+  mutate(perc = n / sum(n)) %>% 
+  ggplot(aes(x=school, y=perc, fill=loan_status))+
+  geom_col(position="dodge")+
+  labs(x = "School", y = "Percent", fill = " Loan Status")+
+  scale_y_continuous(labels=scales::percent_format())+
+  geom_text(aes(label=percent(perc),
+                y=perc + .03),
+            position=position_dodge(0.9),
+            vjust=.10, size=2.0)+
+  theme(axis.ticks.x=element_blank(),axis.text=element_text(size=8), legend.text=element_text(size=8))+
+  theme(axis.text.x=element_text(angle=70, hjust=1))+
+   theme(legend.title = element_text(size = 9)) 
+
+sch_dflt
+
+
+
+
+```
+
+
+
+
+
+```{r}
+
+
+sch_loan_bx<-dflt_grad_4 %>%
+  select(total_loans_cc, school) %>% 
+  ggplot(aes(x=total_loans_cc, y=school, fill=school))+
+  geom_boxplot()+
+  #facet_wrap(~degr_cde)+
+   labs(x = "School", y = "Total Loans")+
+  theme(legend.position = "none")
+
+sch_loan_bx
+
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+
+corr_plot<-dflt_grad_4 %>% 
+  select(loan_status,local_hrs_attempt, local_hrs_earned,nslds_loan_total,age, yrs_to_exit_dt, efc, total_income) %>% 
+  ggscatmat(color="loan_status", 
+            corMethod = "pearson",
+            alpha=0.2)
+
+
+
+
+corr_plot
+
+```
+
+
+
+
+
+
+```{r}
+
+
+
+log_data<-dflt_grad_4 %>% 
+  select(loan_status, school, degr_cde,  local_hrs_earned, gender, citizen_status, age,
+         yrs_to_exit_dt,value_description, marital_status, nslds_loan_total, efc)
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+log_data<-log_data %>% 
+  filter(value_description %in% c("Black or African American", "White", "Hispanics of any race", "Asian" ))
+
+
+log_data$value_description<-droplevels(log_data$value_description)
+
+
+
+
+```
+
+
+
+```{r}
+
+
+log_data<-log_data %>% 
+  mutate(value_description=recode(value_description,"Hispanics of any race"="Hispanic", "Black or African American"="African_American"))
+
+
+
+```
+
+
+
+
+```{r}
+
+
+log_data<-log_data %>% 
+  filter(!is.na(efc))
+
+```
+
+
+
+
+
+# Pre-processing
+
+Before building the models,  data will need to be split and data types transformed. 
+
+
+<br/><br/>
+
